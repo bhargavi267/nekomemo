@@ -1,4 +1,3 @@
-
 exports.handler = async (event) => {
   const headers = {
     "Content-Type": "application/json"
@@ -15,7 +14,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const apiKey = process.env.my_api_key;
+    const apiKey = process.env.Gemini_API_Key;
 
     if (!apiKey) {
       throw new Error("Gemini API key is not configured in Netlify.");
