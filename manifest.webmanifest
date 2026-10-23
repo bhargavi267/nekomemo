@@ -1,0 +1,10 @@
+{
+  "name": "NekoMemo — Learn Smarter",
+  "short_name": "NekoMemo",
+  "description": "Your personal learning and flashcard companion.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f7f7fc",
+  "theme_color": "#6d5ce8",
+  "icons": []
+}
