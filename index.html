@@ -1,94 +1,653 @@
-async function genCards(id) {
-  const t = topicById(id);
-  if (!t) return;
-
-  const button = document.querySelector(`[data-generate="${id}"]`);
-  if (button) {
-    button.disabled = true;
-    button.textContent = "Generating flashcards...";
-  }
-
-  try {
-    const response = await fetch("/.netlify/functions/generate-cards", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        topic: t.title,
-        subject: t.subject,
-        level: t.level,
-        purpose: t.purpose,
-        context: t.lesson?.context || "",
-        count: t.count || 10
-      })
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      throw new Error(result.error || "Could not generate flashcards.");
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NekoMemo | AI Study Space</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#7864c8">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <style>
+    :root {
+      --bg: #faf8f5;
+      --panel: #ffffff;
+      --text: #292738;
+      --muted: #777488;
+      --purple: #7864c8;
+      --light: #eee9ff;
+      --border: #e9e5ef;
+      --green: #247c58;
+      --red: #b93d51;
     }
 
-    if (!Array.isArray(result.cards) || result.cards.length === 0) {
-      throw new Error("No flashcards were returned. Please try again.");
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
     }
 
-    const existing = new Set(
-      data.cards
-        .filter(c => c.topicId === id)
-        .map(c => c.question.trim().toLowerCase())
-    );
+    button, input, select, textarea { font: inherit; }
 
-    let added = 0;
+    button { cursor: pointer; }
 
-    result.cards.forEach(card => {
-      const question = String(card.front || card.question || "").trim();
-      const answer = String(card.back || card.answer || "").trim();
+    header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 17px 5%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 15px;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
 
-      if (
-        !question ||
-        !answer ||
-        existing.has(question.toLowerCase())
-      ) {
+    .brand { font-size: 23px; font-weight: 800; }
+    .brand span { color: var(--purple); }
+    .tagline { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 215px minmax(0, 1fr);
+      min-height: calc(100vh - 70px);
+    }
+
+    aside {
+      padding: 25px 15px;
+      border-right: 1px solid var(--border);
+      background: #fff;
+    }
+
+    .nav-button {
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      padding: 13px;
+      border-radius: 10px;
+      margin-bottom: 7px;
+      color: var(--muted);
+    }
+
+    .nav-button.active, .nav-button:hover {
+      background: var(--light);
+      color: var(--purple);
+    }
+
+    main {
+      padding: 32px;
+      max-width: 1100px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    h1 { font-size: clamp(25px, 4vw, 34px); margin: 0 0 8px; }
+    h2 { font-size: 20px; margin: 0 0 17px; }
+    p { line-height: 1.6; }
+    .muted { color: var(--muted); }
+
+    .hero {
+      padding: 27px;
+      border-radius: 18px;
+      background: linear-gradient(120deg, #eee9ff, #fff1f1);
+      margin-bottom: 25px;
+    }
+
+    .hero p { margin-bottom: 0; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    .stat, .panel, .topic-card, .flashcard {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      padding: 20px;
+    }
+
+    .stat strong { display: block; font-size: 27px; margin-bottom: 5px; }
+    .stat span { color: var(--muted); font-size: 13px; }
+
+    .panel { margin-bottom: 22px; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 15px;
+    }
+
+    label { display: block; font-size: 13px; font-weight: 650; }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 12px;
+      margin-top: 7px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: white;
+      color: var(--text);
+    }
+
+    textarea { resize: vertical; min-height: 80px; }
+
+    .full { grid-column: 1 / -1; }
+
+    .primary, .secondary, .danger {
+      padding: 11px 16px;
+      border: 0;
+      border-radius: 9px;
+      font-weight: 650;
+    }
+
+    .primary { background: var(--purple); color: white; }
+    .primary:hover { background: #6651b6; }
+    .primary:disabled { opacity: .65; cursor: wait; }
+    .secondary { background: var(--light); color: var(--purple); }
+    .danger { background: #fff0f1; color: var(--red); }
+
+    .topic-list, .card-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 15px;
+    }
+
+    .topic-card h3 { margin: 0 0 8px; }
+    .topic-card p { color: var(--muted); font-size: 14px; }
+    .topic-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .pill {
+      display: inline-block;
+      background: var(--light);
+      color: var(--purple);
+      border-radius: 20px;
+      padding: 5px 9px;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+
+    .flashcard { margin-bottom: 14px; }
+    .flashcard h3 { font-size: 17px; line-height: 1.5; }
+    .answer {
+      background: #f7f5fc;
+      border-radius: 10px;
+      padding: 13px;
+      line-height: 1.6;
+      margin: 12px 0;
+      white-space: pre-wrap;
+    }
+
+    .hidden { display: none !important; }
+
+    #notice {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #292738;
+      color: white;
+      padding: 13px 19px;
+      border-radius: 12px;
+      z-index: 20;
+      max-width: 90%;
+      box-shadow: 0 5px 25px #0002;
+    }
+
+    .empty {
+      padding: 25px;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      grid-column: 1 / -1;
+    }
+
+    footer {
+      padding: 25px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    @media (max-width: 700px) {
+      .layout { grid-template-columns: 1fr; }
+      aside {
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        padding: 10px;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .nav-button {
+        width: auto;
+        white-space: nowrap;
+        margin: 0;
+      }
+      main { padding: 18px 13px; }
+      .stats { gap: 8px; }
+      .stat { padding: 12px; }
+      .stat strong { font-size: 22px; }
+      .form-grid, .topic-list, .card-list { grid-template-columns: 1fr; }
+      header { padding: 14px; }
+      .hero { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="brand">🐱 Neko<span>Memo</span></div>
+      <div class="tagline">Your little space for learning</div>
+    </div>
+    <button class="secondary" onclick="showPage('topics')">+ New topic</button>
+  </header>
+
+  <div class="layout">
+    <aside>
+      <button class="nav-button active" data-page="home" onclick="showPage('home')">🏠 Dashboard</button>
+      <button class="nav-button" data-page="topics" onclick="showPage('topics')">📚 My topics</button>
+      <button class="nav-button" data-page="flashcards" onclick="showPage('flashcards')">🗂️ Flashcards</button>
+    </aside>
+
+    <main>
+      <section id="page-home">
+        <div class="hero">
+          <h1>Welcome to NekoMemo ✨</h1>
+          <p class="muted">Make a little progress every day. Create study topics and generate flashcards with AI.</p>
+          <br>
+          <button class="primary" onclick="showPage('topics')">Create a study topic →</button>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><strong id="topic-count">0</strong><span>Study topics</span></div>
+          <div class="stat"><strong id="card-count">0</strong><span>Flashcards saved</span></div>
+          <div class="stat"><strong id="review-count">0</strong><span>Cards reviewed</span></div>
+        </div>
+
+        <div class="panel">
+          <h2>Your recent topics</h2>
+          <div id="home-topics" class="topic-list"></div>
+        </div>
+      </section>
+
+      <section id="page-topics" class="hidden">
+        <h1>My study topics 📚</h1>
+        <p class="muted">Create a topic, then ask Gemini to generate flashcards for it.</p>
+
+        <div class="panel">
+          <h2>Create a topic</h2>
+          <form id="topic-form" class="form-grid">
+            <label>Topic name
+              <input id="topic-title" required maxlength="120" placeholder="e.g. Computer Networks">
+            </label>
+            <label>Subject
+              <input id="topic-subject" required maxlength="80" placeholder="e.g. Computer Science">
+            </label>
+            <label>Study level
+              <select id="topic-level">
+                <option>Beginner</option>
+                <option>Intermediate</option>
+                <option>Advanced</option>
+                <option>Exam preparation</option>
+              </select>
+            </label>
+            <label>Purpose
+              <select id="topic-purpose">
+                <option>Study</option>
+                <option>Exam preparation</option>
+                <option>Interview preparation</option>
+                <option>Revision</option>
+              </select>
+            </label>
+            <label class="full">Extra context (optional)
+              <textarea id="topic-context" placeholder="Add syllabus points or details to focus on"></textarea>
+            </label>
+            <div class="full">
+              <button class="primary" type="submit">Save topic</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel">
+          <h2>All topics</h2>
+          <div id="topic-list" class="topic-list"></div>
+        </div>
+      </section>
+
+      <section id="page-flashcards" class="hidden">
+        <h1>My flashcards 🗂️</h1>
+        <p class="muted">Select a card to reveal its answer. Your cards are saved in this browser.</p>
+        <div class="panel">
+          <label>Filter by topic
+            <select id="card-filter" onchange="renderCards()">
+              <option value="all">All topics</option>
+            </select>
+          </label>
+        </div>
+        <div id="card-list" class="card-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <footer>NekoMemo · Keep learning, one card at a time 🐾</footer>
+  <div id="notice" class="hidden" role="status"></div>
+
+  <script>
+    "use strict";
+
+    const STORAGE_KEY = "nekomemo_study_data_v1";
+
+    let data = loadData();
+
+    function loadData() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        if (saved && Array.isArray(saved.topics) && Array.isArray(saved.cards)) {
+          return saved;
+        }
+      } catch (error) {
+        console.warn("Could not read saved study data.", error);
+      }
+      return { topics: [], cards: [], reviews: 0 };
+    }
+
+    function save() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch (error) {
+        console.error("Could not save study data.", error);
+        toast("Could not save data in this browser.");
+      }
+      renderAll();
+    }
+
+    function uid() {
+      return typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Date.now().toString(36) + Math.random().toString(36).slice(2);
+    }
+
+    function today() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function topicById(id) {
+      return data.topics.find(topic => topic.id === id);
+    }
+
+    function escapeHTML(value) {
+      return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      })[char]);
+    }
+
+    let noticeTimeout;
+
+    function toast(message) {
+      const notice = document.getElementById("notice");
+      notice.textContent = message;
+      notice.classList.remove("hidden");
+      clearTimeout(noticeTimeout);
+      noticeTimeout = setTimeout(() => notice.classList.add("hidden"), 4500);
+    }
+
+    function showPage(page) {
+      ["home", "topics", "flashcards"].forEach(name => {
+        document.getElementById("page-" + name).classList.toggle("hidden", name !== page);
+      });
+
+      document.querySelectorAll(".nav-button").forEach(button => {
+        button.classList.toggle("active", button.dataset.page === page);
+      });
+
+      renderAll();
+    }
+
+    document.getElementById("topic-form").addEventListener("submit", function(event) {
+      event.preventDefault();
+
+      const title = document.getElementById("topic-title").value.trim();
+      const subject = document.getElementById("topic-subject").value.trim();
+
+      if (!title || !subject) {
+        toast("Enter a topic name and subject.");
         return;
       }
 
-      existing.add(question.toLowerCase());
-
-      data.cards.push({
+      data.topics.unshift({
         id: uid(),
-        subject: t.subject,
-        topicId: id,
-        question,
-        answer,
-        reading: "",
-        difficulty: "Normal",
-        notes: "",
-        important: false,
-        source: "AI generated",
-        createdAt: new Date().toISOString(),
-        reviews: 0,
-        nextReview: today()
+        title,
+        subject,
+        level: document.getElementById("topic-level").value,
+        purpose: document.getElementById("topic-purpose").value,
+        lesson: {
+          context: document.getElementById("topic-context").value.trim()
+        },
+        count: 10,
+        createdAt: new Date().toISOString()
       });
 
-      added++;
+      this.reset();
+      save();
+      toast("Study topic created!");
+      showPage("topics");
     });
 
-    if (added === 0) {
-      toast("No new cards generated. Try another topic.");
-      return;
+    function renderAll() {
+      document.getElementById("topic-count").textContent = data.topics.length;
+      document.getElementById("card-count").textContent = data.cards.length;
+      document.getElementById("review-count").textContent = data.reviews || 0;
+
+      const topicHTML = data.topics.map(topic => `
+        <article class="topic-card">
+          <span class="pill">${escapeHTML(topic.subject)}</span>
+          <h3>${escapeHTML(topic.title)}</h3>
+          <p>${escapeHTML(topic.level)} · ${data.cards.filter(card => card.topicId === topic.id).length} cards</p>
+          <div class="topic-actions">
+            <button class="primary" data-generate="${escapeHTML(topic.id)}"
+              onclick="genCards('${escapeHTML(topic.id)}')">Generate AI flashcards →</button>
+            <button class="secondary" onclick="viewTopicCards('${escapeHTML(topic.id)}')">View cards</button>
+            <button class="danger" onclick="deleteTopic('${escapeHTML(topic.id)}')">Delete</button>
+          </div>
+        </article>
+      `).join("");
+
+      document.getElementById("topic-list").innerHTML =
+        topicHTML || '<div class="empty">No topics yet. Create your first study topic above.</div>';
+
+      document.getElementById("home-topics").innerHTML =
+        topicHTML.slice(0, 0) || data.topics.slice(0, 4).map(topic => `
+          <article class="topic-card">
+            <span class="pill">${escapeHTML(topic.subject)}</span>
+            <h3>${escapeHTML(topic.title)}</h3>
+            <p>${data.cards.filter(card => card.topicId === topic.id).length} flashcards saved</p>
+            <button class="secondary" onclick="viewTopicCards('${escapeHTML(topic.id)}')">View cards →</button>
+          </article>
+        `).join("") || '<div class="empty">Your topics will appear here after you create one.</div>';
+
+      const filter = document.getElementById("card-filter");
+      const oldValue = filter.value;
+      filter.innerHTML = '<option value="all">All topics</option>' +
+        data.topics.map(topic =>
+          `<option value="${escapeHTML(topic.id)}">${escapeHTML(topic.title)}</option>`
+        ).join("");
+
+      if ([...filter.options].some(option => option.value === oldValue)) {
+        filter.value = oldValue;
+      }
+
+      renderCards();
     }
 
-    save();
-    toast(`${added} AI flashcards created!`);
-    go("flashcards");
-
-  } catch (error) {
-    console.error("Flashcard generation failed:", error);
-    toast(error.message || "Generation failed. Please try again.");
-  } finally {
-    if (button) {
-      button.disabled = false;
-      button.textContent = "Generate starter flashcards →";
+    function viewTopicCards(id) {
+      showPage("flashcards");
+      document.getElementById("card-filter").value = id;
+      renderCards();
     }
-  }
-}
+
+    function deleteTopic(id) {
+      const topic = topicById(id);
+      if (!topic) return;
+
+      if (!confirm(`Delete "${topic.title}" and its flashcards?`)) return;
+
+      data.topics = data.topics.filter(item => item.id !== id);
+      data.cards = data.cards.filter(card => card.topicId !== id);
+      save();
+      toast("Topic deleted.");
+    }
+
+    function renderCards() {
+      const filter = document.getElementById("card-filter").value;
+      const cards = data.cards.filter(card => filter === "all" || card.topicId === filter);
+
+      document.getElementById("card-list").innerHTML = cards.map(card => `
+        <article class="flashcard">
+          <span class="pill">${escapeHTML(card.subject)}</span>
+          <h3>${escapeHTML(card.question)}</h3>
+          <div id="answer-${escapeHTML(card.id)}" class="answer hidden">${escapeHTML(card.answer)}</div>
+          <div class="topic-actions">
+            <button class="secondary" onclick="toggleAnswer('${escapeHTML(card.id)}')">Show / hide answer</button>
+            <button class="secondary" onclick="markReviewed('${escapeHTML(card.id)}')">✓ Reviewed</button>
+            <button class="danger" onclick="deleteCard('${escapeHTML(card.id)}')">Delete</button>
+          </div>
+        </article>
+      `).join("") || '<div class="empty">No flashcards yet. Create a topic and generate AI flashcards.</div>';
+    }
+
+    function toggleAnswer(id) {
+      const answer = document.getElementById("answer-" + id);
+      if (answer) answer.classList.toggle("hidden");
+    }
+
+    function markReviewed(id) {
+      const card = data.cards.find(item => item.id === id);
+      if (!card) return;
+      card.reviews = (card.reviews || 0) + 1;
+      data.reviews = (data.reviews || 0) + 1;
+      save();
+      toast("Card marked as reviewed!");
+    }
+
+    function deleteCard(id) {
+      if (!confirm("Delete this flashcard?")) return;
+      data.cards = data.cards.filter(card => card.id !== id);
+      save();
+      toast("Flashcard deleted.");
+    }
+
+    async function genCards(id) {
+      const t = topicById(id);
+      if (!t) return;
+
+      const button = document.querySelector(`[data-generate="${id}"]`);
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Generating AI flashcards...";
+      }
+
+      try {
+        const response = await fetch("/api/generate-cards", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            topic: t.title,
+            subject: t.subject,
+            level: t.level,
+            purpose: t.purpose,
+            context: t.lesson?.context || "",
+            count: t.count || 10
+          })
+        });
+
+        let result = {};
+        try { result = await response.json(); } catch (e) { /* non-JSON response */ }
+
+        if (!response.ok) {
+          throw new Error(result.error || (response.status === 404 ? "AI endpoint not found. Is the site deployed on Vercel with the /api folder?" : "Could not generate flashcards."));
+        }
+
+        if (!Array.isArray(result.cards) || result.cards.length === 0) {
+          throw new Error("No flashcards returned. Please try again.");
+        }
+
+        const existing = new Set(
+          data.cards
+            .filter(card => card.topicId === id)
+            .map(card => card.question.trim().toLowerCase())
+        );
+
+        let added = 0;
+
+        result.cards.forEach(card => {
+          const question = String(card.front || card.question || "").trim();
+          const answer = String(card.back || card.answer || "").trim();
+
+          if (!question || !answer || existing.has(question.toLowerCase())) return;
+
+          existing.add(question.toLowerCase());
+
+          data.cards.push({
+            id: uid(),
+            subject: t.subject,
+            topicId: id,
+            question,
+            answer,
+            reading: "",
+            difficulty: "Normal",
+            notes: "",
+            important: false,
+            source: "AI generated",
+            createdAt: new Date().toISOString(),
+            reviews: 0,
+            nextReview: today()
+          });
+
+          added++;
+        });
+
+        if (added === 0) {
+          toast("No new cards generated. Try another topic.");
+          return;
+        }
+
+        save();
+        toast(`${added} AI flashcards created!`);
+        showPage("flashcards");
+        document.getElementById("card-filter").value = id;
+        renderCards();
+
+      } catch (error) {
+        console.error("Flashcard generation failed:", error);
+        toast(error.message || "Generation failed. Please try again.");
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = "Generate AI flashcards →";
+        }
+      }
+    }
+
+    renderAll();
+
+    if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(error => console.warn("Service worker failed:", error));
+      });
+    }
+  </script>
+</body>
+</html>
